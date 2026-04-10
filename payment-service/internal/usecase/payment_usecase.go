@@ -1,0 +1,52 @@
+package usecase
+
+import (
+	"fmt"
+
+	"payment-service/internal/domain"
+
+	"github.com/google/uuid"
+)
+
+type PaymentUseCase struct {
+	repo domain.PaymentRepository
+}
+
+func NewPaymentUseCase(repo domain.PaymentRepository) *PaymentUseCase {
+	return &PaymentUseCase{repo: repo}
+}
+
+type AuthorizeInput struct {
+	OrderID string
+	Amount  int64
+}
+
+type AuthorizeOutput struct {
+	Payment *domain.Payment
+}
+
+func (uc *PaymentUseCase) Authorize(input AuthorizeInput) (*AuthorizeOutput, error) {
+	payment, err := domain.NewPayment(
+		uuid.New().String(),
+		input.OrderID,
+		uuid.New().String(), // unique transaction ID
+		input.Amount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create payment: %w", err)
+	}
+
+	if err := uc.repo.Save(payment); err != nil {
+		return nil, fmt.Errorf("save payment: %w", err)
+	}
+
+	return &AuthorizeOutput{Payment: payment}, nil
+}
+
+func (uc *PaymentUseCase) GetByOrderID(orderID string) (*domain.Payment, error) {
+	p, err := uc.repo.FindByOrderID(orderID)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
