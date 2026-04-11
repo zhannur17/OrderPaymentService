@@ -9,9 +9,9 @@ import (
 
 func main() {
 	cfg := app.Config{
-		DBConnStr:      getEnv("ORDER_DB_DSN", "postgres://postgres:postgres@localhost:5432/orders_db?sslmode=disable"),
-		PaymentBaseURL: getEnv("PAYMENT_SERVICE_URL", "http://localhost:8081"),
-		Port:           getEnv("ORDER_PORT", "8080"),
+		DBConnStr:       getEnv("ORDER_DB_DSN", "postgres://postgres:0000@localhost:5432/orders_db?sslmode=disable"),
+		PaymentGRPCAddr: getEnv("PAYMENT_GRPC_ADDR", "localhost:50051"),
+		Port:            getEnv("ORDER_PORT", "8080"),
 	}
 
 	if err := app.Run(cfg); err != nil {
