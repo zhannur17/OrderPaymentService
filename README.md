@@ -1,67 +1,55 @@
-Order Service — README
+# AP2 Assignment 2 - gRPC Migration
 
-What is this
-Service for managing orders. Saves orders to database and calls Payment Service to process payments.
+## Repositories
+- **Proto Repository**: https://github.com/zhannur17/ap2-protos
+- **Generated Code Repository**: https://github.com/zhannur17/ap2-generated
 
-Architecture (Clean Architecture)
+## Architecture
+- **Order Service** — REST server (Gin) on :8080, gRPC client → Payment Service, gRPC server on :50052
+- **Payment Service** — gRPC server on :50051 with Logging Interceptor
 
-Domain — models and business rules
+## Communication
+- External: REST (POST /orders, GET /orders/:id, PATCH /orders/:id/cancel)
+- Internal: gRPC (Order Service → Payment Service)
+- Streaming: gRPC Server-side streaming (Order Service → Client)
 
-Use Case — business logic (create, cancel order)
+### Prerequisites
+- Go 1.22+
+- PostgreSQL
 
-Repository — all database queries
+### 1. Start Payment Service
+```cmd
+cd payment-service
+go run ./cmd/payment-service
+```
 
-Transport — HTTP handlers, only parse request and return response
+### 2. Start Order Service
+```cmd
+cd order-service
+go run ./cmd/order-service
+```
 
-Each layer depends only inward. Handlers do not contain business logic.
+### 3. Test gRPC call
+```powershell
+Invoke-WebRequest -Uri "http://localhost:8080/orders" -Method POST -ContentType "application/json" -Body '{"customer_id": "customer1", "item_name": "Test Item", "amount": 5000}'
+```
 
-Bounded Context
+## Environment Variables
 
-Order Service owns only orders and its own database. It does not touch Payment Service database. Communication only through HTTP.
+### payment-service/.env
+PAYMENT_DB_DSN=postgres://postgres:0000@localhost:5432/payments_db?sslmode=disable
+GRPC_PORT=50051
 
-Flow when creating an order
+### order-service/.env
+ORDER_DB_DSN=postgres://postgres:0000@localhost:5432/orders_db?sslmode=disable
+PAYMENT_GRPC_ADDR=localhost:50051
+ORDER_PORT=8080
+GRPC_PORT=50052
 
-Save order with status Pending
-
-Call Payment Service POST /payments
-
-Get response → update status to Paid or Failed
-
-Failure Handling
-
-If Payment Service is down — HTTP client times out after 2 seconds, order is marked Failed, user gets 503. We chose Failed over Pending because if payment never happened the order clearly did not succeed.
-
-Business Rules
-
-Amount must be greater than 0
-
-Only Pending orders can be cancelled
-
-Paid orders cannot be cancelled
+## Branch
+- `master` — Assignment 1 (REST)
+- `grpc-migration` — Assignment 2 (gRPC)
 
 
-Payment Service — README
-
-What is this
-
-Service for processing payments. Receives requests from Order Service, checks amount limit, saves payment to its own database.
-
-Architecture (Clean Architecture)
-
-Same layer structure as Order Service. Each layer has one responsibility. Business logic lives only in Use Case and Domain.
-
-Bounded Context
-
-Payment Service owns only payments and its own database. Does not know about orders. Only receives order_id and amount.
-
-Business Rules
-
-Amount greater than 100000 → Declined
-
-Amount less or equal to 100000 → Authorized
-
-Each payment gets a unique transaction_id
-
-Failure Handling
-
-If Payment Service goes down — Order Service handles it with a 2 second timeout on its side.
+## Architecture Diagram
+![Architecture](architecture.png)
