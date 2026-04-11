@@ -4,11 +4,15 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
+	"os"
 
 	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
 
+	paymentv1 "github.com/zhannur17/ap2-generated/payment/v1"
 	"payment-service/internal/repository"
-	transporthttp "payment-service/internal/transport/http"
+	transportgrpc "payment-service/internal/transport/grpc"
 	"payment-service/internal/usecase"
 )
 
@@ -27,14 +31,24 @@ func Run(cfg Config) error {
 	}
 	log.Println("Connected to database")
 
-	// Composition Root
 	paymentRepo := repository.NewPostgresPaymentRepository(db)
 	paymentUC := usecase.NewPaymentUseCase(paymentRepo)
-	paymentHandler := transporthttp.NewPaymentHandler(paymentUC)
 
-	router := transporthttp.NewRouter(paymentHandler)
+	grpcPort := os.Getenv("GRPC_PORT")
+	if grpcPort == "" {
+		grpcPort = "50051"
+	}
 
-	addr := ":" + cfg.Port
-	log.Printf("Payment Service listening on %s", addr)
-	return router.Run(addr)
+	lis, err := net.Listen("tcp", ":"+grpcPort)
+	if err != nil {
+		return fmt.Errorf("listen grpc: %w", err)
+	}
+
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(transportgrpc.LoggingInterceptor),
+	)
+	paymentv1.RegisterPaymentServiceServer(grpcServer, transportgrpc.NewPaymentServer(paymentUC))
+
+	log.Printf("Payment gRPC server listening on :%s", grpcPort)
+	return grpcServer.Serve(lis)
 }
