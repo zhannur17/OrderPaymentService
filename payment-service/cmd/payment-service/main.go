@@ -9,7 +9,7 @@ import (
 
 func main() {
 	cfg := app.Config{
-		DBConnStr: getEnv("PAYMENT_DB_DSN", "postgres://postgres:0000@localhost:5432/payments_db?sslmode=disable"),
+		DBConnStr: getEnv("PAYMENT_DB_DSN", "postgres://postgres:0000@localhost:5432/payment_db?sslmode=disable"),
 		Port:      getEnv("PAYMENT_PORT", "8081"),
 	}
 
