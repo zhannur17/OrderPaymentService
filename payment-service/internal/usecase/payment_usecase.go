@@ -29,7 +29,7 @@ func (uc *PaymentUseCase) Authorize(input AuthorizeInput) (*AuthorizeOutput, err
 	payment, err := domain.NewPayment(
 		uuid.New().String(),
 		input.OrderID,
-		uuid.New().String(), // unique transaction ID
+		uuid.New().String(),
 		input.Amount,
 	)
 	if err != nil {
@@ -49,4 +49,12 @@ func (uc *PaymentUseCase) GetByOrderID(orderID string) (*domain.Payment, error) 
 		return nil, err
 	}
 	return p, nil
+}
+
+func (uc *PaymentUseCase) ListByStatus(status string) ([]*domain.Payment, error) {
+	payments, err := uc.repo.ListByStatus(status)
+	if err != nil {
+		return nil, fmt.Errorf("list payments by status: %w", err)
+	}
+	return payments, nil
 }
