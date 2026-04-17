@@ -41,3 +41,25 @@ func (s *PaymentServer) ProcessPayment(ctx context.Context, req *paymentv1.Payme
 		ProcessedAt:   timestamppb.New(time.Now()),
 	}, nil
 }
+
+func (s *PaymentServer) ListPayments(ctx context.Context, req *paymentv1.ListPaymentsRequest) (*paymentv1.ListPaymentsResponse, error) {
+	if req.Status != "Authorized" && req.Status != "Declined" {
+		return nil, status.Errorf(codes.InvalidArgument, "status must be 'Authorized' or 'Declined', got: %q", req.Status)
+	}
+
+	payments, err := s.uc.ListByStatus(req.Status)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list payments failed: %v", err)
+	}
+
+	resp := &paymentv1.ListPaymentsResponse{}
+	for _, p := range payments {
+		resp.Payments = append(resp.Payments, &paymentv1.PaymentResponse{
+			TransactionId: p.TransactionID,
+			Status:        p.Status,
+			ProcessedAt:   timestamppb.New(time.Now()),
+		})
+	}
+
+	return resp, nil
+}
