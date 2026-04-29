@@ -1,0 +1,97 @@
+version: "3.9"
+
+services:
+  # ─── Databases ────────────────────────────────────────────────────────────────
+  orders-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: order_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - orders_data:/var/lib/postgresql/data
+      - ./order-service/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  payments-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: payment_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - payments_data:/var/lib/postgresql/data
+      - ./payment-service/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Message Broker ───────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # ─── Services ─────────────────────────────────────────────────────────────────
+  payment-service:
+    build: ./payment-service
+    environment:
+      PAYMENT_DB_DSN: postgres://postgres:postgres@payments-db:5432/payment_db?sslmode=disable
+      GRPC_PORT: "50051"
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      payments-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "8080:8080"
+    environment:
+      ORDER_DB_DSN: postgres://postgres:postgres@orders-db:5432/order_db?sslmode=disable
+      PAYMENT_SERVICE_URL: payment-service:50051
+      ORDER_PORT: "8080"
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      payment-service:
+        condition: service_started
+    restart: on-failure
+
+  notification-service:
+    build: ./notification-service
+    environment:
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  orders_data:
+  payments_data:
+  rabbitmq_data:
