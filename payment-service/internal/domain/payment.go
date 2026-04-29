@@ -6,7 +6,7 @@ const (
 	StatusAuthorized = "Authorized"
 	StatusDeclined   = "Declined"
 
-	MaxAllowedAmount int64 = 100000 // 1000 units in cents
+	MaxAllowedAmount int64 = 100000
 )
 
 var (
