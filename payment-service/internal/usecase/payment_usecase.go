@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"fmt"
+	"log"
 
 	"payment-service/internal/domain"
 
@@ -9,16 +10,18 @@ import (
 )
 
 type PaymentUseCase struct {
-	repo domain.PaymentRepository
+	repo      domain.PaymentRepository
+	publisher domain.EventPublisher
 }
 
-func NewPaymentUseCase(repo domain.PaymentRepository) *PaymentUseCase {
-	return &PaymentUseCase{repo: repo}
+func NewPaymentUseCase(repo domain.PaymentRepository, publisher domain.EventPublisher) *PaymentUseCase {
+	return &PaymentUseCase{repo: repo, publisher: publisher}
 }
 
 type AuthorizeInput struct {
-	OrderID string
-	Amount  int64
+	OrderID       string
+	Amount        int64
+	CustomerEmail string
 }
 
 type AuthorizeOutput struct {
@@ -38,6 +41,24 @@ func (uc *PaymentUseCase) Authorize(input AuthorizeInput) (*AuthorizeOutput, err
 
 	if err := uc.repo.Save(payment); err != nil {
 		return nil, fmt.Errorf("save payment: %w", err)
+	}
+
+	// Publish event AFTER successful DB save
+	email := input.CustomerEmail
+	if email == "" {
+		email = "user@example.com"
+	}
+
+	event := domain.PaymentEvent{
+		EventID:       uuid.New().String(),
+		OrderID:       payment.OrderID,
+		Amount:        payment.Amount,
+		CustomerEmail: email,
+		Status:        payment.Status,
+	}
+
+	if err := uc.publisher.PublishPaymentEvent(event); err != nil {
+		log.Printf("[PaymentUseCase] Warning: failed to publish event: %v", err)
 	}
 
 	return &AuthorizeOutput{Payment: payment}, nil

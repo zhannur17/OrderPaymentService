@@ -11,6 +11,7 @@ func main() {
 	cfg := app.Config{
 		DBConnStr: getEnv("PAYMENT_DB_DSN", "postgres://postgres:0000@localhost:5432/payment_db?sslmode=disable"),
 		Port:      getEnv("PAYMENT_PORT", "8081"),
+		AmqpURL:   getEnv("AMQP_URL", "amqp://guest:guest@localhost:5672/"),
 	}
 
 	if err := app.Run(cfg); err != nil {
