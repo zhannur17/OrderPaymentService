@@ -5,4 +5,5 @@ type OrderRepository interface {
 	FindByID(id string) (*Order, error)
 	Update(order *Order) error
 	FindByIdempotencyKey(key string) (*Order, error)
+	FindByAmountRange(minAmount, maxAmount int64) ([]*Order, error)
 }

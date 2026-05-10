@@ -87,6 +87,33 @@ func (r *PostgresOrderRepository) FindByIdempotencyKey(key string) (*domain.Orde
 	return scanOrder(row)
 }
 
+func (r *PostgresOrderRepository) FindByAmountRange(minAmount, maxAmount int64) ([]*domain.Order, error) {
+	query := `
+		SELECT id, customer_id, item_name, amount, status, created_at
+		FROM orders WHERE amount >= $1 AND amount <= $2
+	`
+	rows, err := r.db.Query(query, minAmount, maxAmount)
+	if err != nil {
+		return nil, fmt.Errorf("query orders by amount range: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []*domain.Order
+	for rows.Next() {
+		var o domain.Order
+		var createdAt time.Time
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.ItemName, &o.Amount, &o.Status, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan order: %w", err)
+		}
+		o.CreatedAt = createdAt
+		orders = append(orders, &o)
+	}
+	if orders == nil {
+		orders = []*domain.Order{}
+	}
+	return orders, nil
+}
+
 func scanOrder(row *sql.Row) (*domain.Order, error) {
 	var o domain.Order
 	var createdAt time.Time

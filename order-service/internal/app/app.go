@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	_ "github.com/lib/pq"
 	"google.golang.org/grpc"
@@ -21,6 +23,7 @@ type Config struct {
 	DBConnStr       string
 	PaymentGRPCAddr string
 	Port            string
+	RedisURL        string
 }
 
 func Run(cfg Config) error {
@@ -33,6 +36,10 @@ func Run(cfg Config) error {
 	}
 	log.Println("Connected to database")
 
+	// Connect Redis
+	cache := repository.NewRedisCache(cfg.RedisURL)
+	log.Println("Connected to Redis")
+
 	orderRepo := repository.NewPostgresOrderRepository(db)
 
 	paymentClient, err := repository.NewGRPCPaymentClient(cfg.PaymentGRPCAddr)
@@ -40,8 +47,10 @@ func Run(cfg Config) error {
 		return fmt.Errorf("grpc payment client: %w", err)
 	}
 
+	// Composition Root with cache
 	orderUC := usecase.NewOrderUseCase(orderRepo, paymentClient)
-	orderHandler := transporthttp.NewOrderHandler(orderUC)
+	cachedUC := usecase.NewCachedOrderUseCase(orderUC, cache)
+	orderHandler := transporthttp.NewOrderHandler(cachedUC)
 	router := transporthttp.NewRouter(orderHandler)
 
 	grpcPort := os.Getenv("GRPC_PORT")
@@ -62,6 +71,15 @@ func Run(cfg Config) error {
 		if err := grpcServer.Serve(lis); err != nil {
 			log.Printf("gRPC server error: %v", err)
 		}
+	}()
+
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-quit
+		log.Println("[Order] Shutting down...")
+		grpcServer.GracefulStop()
 	}()
 
 	addr := ":" + cfg.Port

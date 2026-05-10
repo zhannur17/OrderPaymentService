@@ -97,3 +97,7 @@ func (uc *OrderUseCase) CancelOrder(id string) (*domain.Order, error) {
 	}
 	return order, nil
 }
+
+func (uc *OrderUseCase) GetOrdersByAmountRange(minAmount, maxAmount int64) ([]*domain.Order, error) {
+	return uc.repo.FindByAmountRange(minAmount, maxAmount)
+}

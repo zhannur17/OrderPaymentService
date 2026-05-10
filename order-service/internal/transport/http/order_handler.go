@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"order-service/internal/domain"
@@ -10,11 +11,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type OrderHandler struct {
-	uc *usecase.OrderUseCase
+// OrderUseCaseInterface allows handler to work with both OrderUseCase and CachedOrderUseCase
+type OrderUseCaseInterface interface {
+	CreateOrder(input usecase.CreateOrderInput) (*usecase.CreateOrderOutput, error)
+	GetOrder(id string) (*domain.Order, error)
+	CancelOrder(id string) (*domain.Order, error)
+	GetOrdersByAmountRange(minAmount, maxAmount int64) ([]*domain.Order, error)
 }
 
-func NewOrderHandler(uc *usecase.OrderUseCase) *OrderHandler {
+type OrderHandler struct {
+	uc OrderUseCaseInterface
+}
+
+func NewOrderHandler(uc OrderUseCaseInterface) *OrderHandler {
 	return &OrderHandler{uc: uc}
 }
 
@@ -52,8 +61,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	status := http.StatusCreated
-	c.JSON(status, orderResponse(out.Order))
+	c.JSON(http.StatusCreated, orderResponse(out.Order))
 }
 
 func (h *OrderHandler) GetOrder(c *gin.Context) {
@@ -86,6 +94,46 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, orderResponse(order))
+}
+
+func (h *OrderHandler) ListOrdersByAmount(c *gin.Context) {
+	minStr := c.Query("min_amount")
+	maxStr := c.Query("max_amount")
+
+	if minStr == "" || maxStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_amount and max_amount are required"})
+		return
+	}
+
+	var minAmount, maxAmount int64
+	if _, err := fmt.Sscan(minStr, &minAmount); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_amount must be a number"})
+		return
+	}
+	if _, err := fmt.Sscan(maxStr, &maxAmount); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "max_amount must be a number"})
+		return
+	}
+	if minAmount < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_amount must be >= 0"})
+		return
+	}
+	if minAmount > maxAmount {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_amount must be <= max_amount"})
+		return
+	}
+
+	orders, err := h.uc.GetOrdersByAmountRange(minAmount, maxAmount)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	result := make([]gin.H, 0, len(orders))
+	for _, o := range orders {
+		result = append(result, orderResponse(o))
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func orderResponse(o *domain.Order) gin.H {
