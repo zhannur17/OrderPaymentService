@@ -63,7 +63,7 @@ func (c *RabbitMQConsumer) Start(quit <-chan struct{}) error {
 	msgs, err := c.channel.Consume(
 		QueueName,
 		"",
-		false, // auto-ack DISABLED
+		false,
 		false,
 		false,
 		false,
