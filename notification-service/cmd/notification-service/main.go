@@ -9,7 +9,12 @@ import (
 
 func main() {
 	cfg := app.Config{
-		AmqpURL: getEnv("AMQP_URL", "amqp://guest:guest@localhost:5672/"),
+		AmqpURL:      getEnv("AMQP_URL", "amqp://guest:guest@localhost:5672/"),
+		RedisURL:     getEnv("REDIS_URL", "localhost:6379"),
+		ProviderMode: getEnv("PROVIDER_MODE", "SIMULATED"),
+		SmtpHost:     getEnv("SMTP_HOST", ""),
+		SmtpPort:     getEnv("SMTP_PORT", "587"),
+		SmtpFrom:     getEnv("SMTP_FROM", ""),
 	}
 
 	log.Println("Starting Notification Service...")

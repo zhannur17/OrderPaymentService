@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 
 	"notification-service/internal/domain"
 )
@@ -14,13 +14,12 @@ import (
 const QueueName = "payment.completed"
 
 type RabbitMQConsumer struct {
-	conn         *amqp.Connection
-	channel      *amqp.Channel
-	mu           sync.Mutex
-	processedIDs map[string]bool
+	conn    *amqp.Connection
+	channel *amqp.Channel
+	worker  *Worker
 }
 
-func NewRabbitMQConsumer(amqpURL string) (*RabbitMQConsumer, error) {
+func NewRabbitMQConsumer(amqpURL string, redisClient *redis.Client, sender domain.EmailSender) (*RabbitMQConsumer, error) {
 	conn, err := amqp.Dial(amqpURL)
 	if err != nil {
 		return nil, fmt.Errorf("dial rabbitmq: %w", err)
@@ -50,12 +49,14 @@ func NewRabbitMQConsumer(amqpURL string) (*RabbitMQConsumer, error) {
 		return nil, fmt.Errorf("set qos: %w", err)
 	}
 
+	worker := NewWorker(sender, redisClient)
+
 	log.Println("[Consumer] Connected to RabbitMQ, listening on:", QueueName)
 
 	return &RabbitMQConsumer{
-		conn:         conn,
-		channel:      ch,
-		processedIDs: make(map[string]bool),
+		conn:    conn,
+		channel: ch,
+		worker:  worker,
 	}, nil
 }
 
@@ -63,7 +64,7 @@ func (c *RabbitMQConsumer) Start(quit <-chan struct{}) error {
 	msgs, err := c.channel.Consume(
 		QueueName,
 		"",
-		false,
+		false, // auto-ack DISABLED
 		false,
 		false,
 		false,
@@ -97,23 +98,11 @@ func (c *RabbitMQConsumer) handleMessage(msg amqp.Delivery) {
 		return
 	}
 
-	// Idempotency check
-	c.mu.Lock()
-	already := c.processedIDs[event.EventID]
-	if !already {
-		c.processedIDs[event.EventID] = true
-	}
-	c.mu.Unlock()
-
-	if already {
-		log.Printf("[Consumer] Duplicate event %s — skipping", event.EventID)
-		msg.Ack(false)
+	if err := c.worker.Process(event); err != nil {
+		log.Printf("[Consumer] Failed to process event %s: %v — sending NACK", event.EventID, err)
+		msg.Nack(false, false)
 		return
 	}
-
-	amountDollars := float64(event.Amount) / 100.0
-	log.Printf("[Notification] Sent email to %s for Order #%s. Amount: $%.2f. Status: %s",
-		event.CustomerEmail, event.OrderID, amountDollars, event.Status)
 
 	msg.Ack(false)
 }
